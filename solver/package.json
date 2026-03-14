@@ -1,0 +1,25 @@
+{
+  "name": "xcm-intents-solver",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "create-intent": "tsx src/scripts/create-intent.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "description": "Off-chain solver for XCM Intents protocol",
+  "dependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.4.0",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "viem": "^2.47.1"
+  }
+}
