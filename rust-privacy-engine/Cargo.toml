@@ -1,0 +1,33 @@
+[package]
+name = "rust-privacy-engine"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+build = "build.rs"
+
+[[bin]]
+name = "rust-privacy-engine"
+path = "src/rust-privacy-engine.rs"
+
+[dependencies]
+pallet-revive-uapi = { version = "0.10", default-features = false }
+polkavm-derive = { version = "0.31.0" }
+
+# Crypto (arkworks) - test if these compile to PVM
+ark-ff = { version = "0.4", default-features = false }
+ark-ec = { version = "0.4", default-features = false }
+ark-std = { version = "0.4", default-features = false }
+ark-serialize = { version = "0.4", default-features = false }
+ark-ed-on-bls12-381 = { version = "0.4", default-features = false }
+blake2 = { version = "0.10", default-features = false }
+
+[build-dependencies]
+cargo-pvm-contract-builder = "0.3.0"
+
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
+panic = "abort"
+overflow-checks = false
