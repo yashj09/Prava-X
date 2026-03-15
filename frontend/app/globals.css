@@ -1,0 +1,228 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: #fafafa;
+  --color-foreground: #0a0a0a;
+  --color-polkadot: #E6007A;
+  --color-polkadot-light: #FF2D96;
+  --color-polkadot-dark: #B8005F;
+  --color-polkadot-subtle: #FFF0F6;
+  --color-glass: rgba(255, 255, 255, 0.72);
+  --color-glass-border: rgba(230, 0, 122, 0.12);
+  --color-glass-hover: rgba(255, 255, 255, 0.88);
+  --color-muted: #71717a;
+  --color-muted-light: #a1a1aa;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-surface: #ffffff;
+  --color-surface-raised: #fafafa;
+  --font-display: var(--font-syne);
+  --font-body: var(--font-dm-sans);
+}
+
+/* ─── Base ─── */
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-body), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Glassmorphic surfaces ─── */
+.glass {
+  background: var(--color-glass);
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  border: 1px solid var(--color-glass-border);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.03),
+    0 8px 32px rgba(230, 0, 122, 0.04);
+}
+
+.glass:hover {
+  background: var(--color-glass-hover);
+  border-color: rgba(230, 0, 122, 0.22);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.03),
+    0 12px 40px rgba(230, 0, 122, 0.08);
+}
+
+.glass-static {
+  background: var(--color-glass);
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  border: 1px solid var(--color-glass-border);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.03),
+    0 8px 32px rgba(230, 0, 122, 0.04);
+}
+
+/* ─── Mesh gradient background ─── */
+.mesh-gradient {
+  background:
+    radial-gradient(ellipse at 15% 30%, rgba(230, 0, 122, 0.07) 0%, transparent 50%),
+    radial-gradient(ellipse at 85% 15%, rgba(230, 0, 122, 0.05) 0%, transparent 45%),
+    radial-gradient(ellipse at 55% 85%, rgba(184, 0, 95, 0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(255, 240, 246, 0.5) 0%, transparent 70%),
+    #fafafa;
+}
+
+/* ─── Dot grid pattern ─── */
+.dot-grid {
+  background-image: radial-gradient(rgba(230, 0, 122, 0.15) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* ─── Pink glow ─── */
+.glow-pink {
+  box-shadow:
+    0 0 20px rgba(230, 0, 122, 0.12),
+    0 0 60px rgba(230, 0, 122, 0.06);
+}
+
+.glow-pink-intense {
+  box-shadow:
+    0 0 30px rgba(230, 0, 122, 0.2),
+    0 0 80px rgba(230, 0, 122, 0.1),
+    0 0 120px rgba(230, 0, 122, 0.05);
+}
+
+/* ─── Animated border glow ─── */
+@keyframes border-glow {
+  0%, 100% { border-color: rgba(230, 0, 122, 0.15); }
+  50% { border-color: rgba(230, 0, 122, 0.4); }
+}
+.animate-border {
+  animation: border-glow 3s ease-in-out infinite;
+}
+
+/* ─── Stagger fade-in ─── */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.stagger-1 { animation-delay: 0.1s; }
+.stagger-2 { animation-delay: 0.2s; }
+.stagger-3 { animation-delay: 0.3s; }
+.stagger-4 { animation-delay: 0.4s; }
+.stagger-5 { animation-delay: 0.5s; }
+.stagger-6 { animation-delay: 0.6s; }
+
+/* ─── Redacted text effect (privacy theme) ─── */
+.redacted {
+  background: linear-gradient(90deg, var(--color-polkadot), var(--color-polkadot-dark));
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: blur(4px);
+  user-select: none;
+  transition: filter 0.4s ease;
+}
+
+.redacted-reveal:hover .redacted {
+  filter: blur(0px);
+}
+
+/* ─── Shimmer loading ─── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(230, 0, 122, 0.03) 25%,
+    rgba(230, 0, 122, 0.08) 50%,
+    rgba(230, 0, 122, 0.03) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+/* ─── Tab active indicator ─── */
+.tab-active {
+  position: relative;
+}
+.tab-active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--color-polkadot);
+  border-radius: 1px;
+}
+
+/* ─── Privacy toggle ─── */
+.toggle-track {
+  transition: background-color 0.2s ease;
+}
+.toggle-track[data-active="true"] {
+  background-color: var(--color-polkadot);
+}
+.toggle-thumb {
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.toggle-track[data-active="true"] .toggle-thumb {
+  transform: translateX(20px);
+}
+
+/* ─── Floating orb decoration ─── */
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  33% { transform: translateY(-8px) rotate(1deg); }
+  66% { transform: translateY(4px) rotate(-1deg); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-float-slow {
+  animation: float 10s ease-in-out infinite;
+}
+
+/* ─── Pulse dot ─── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.5); }
+}
+
+.pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(230, 0, 122, 0.2);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(230, 0, 122, 0.35);
+}
+
+/* ─── Selection ─── */
+::selection {
+  background: rgba(230, 0, 122, 0.15);
+  color: var(--color-foreground);
+}
