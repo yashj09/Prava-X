@@ -13,7 +13,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { config, polkadotTestnet } from "./config.js";
-import type { SignedIntent } from "./types.js";
+import type { SignedIntent, SignedPrivateIntent } from "./types.js";
 import { getCurrentPrice } from "./price.js";
 import reactorAbi from "./abi/IntentReactor.json" with { type: "json" };
 
@@ -123,6 +123,46 @@ export class FillExecutor {
       functionName: "balanceOf",
       args: [this.account.address],
     });
+  }
+
+  /** Fill a private intent by revealing the hidden parameters */
+  async fillPrivateIntent(
+    signedPrivate: SignedPrivateIntent
+  ): Promise<`0x${string}`> {
+    const { reveal } = signedPrivate;
+
+    console.log(
+      `[Executor] Filling private intent ${signedPrivate.id}:`,
+      `\n  Commitment: ${reveal.commitment}`,
+      `\n  Sell: ${formatEther(reveal.sellAmount)} of ${reveal.sellAsset}`,
+      `\n  Buy: ${formatEther(reveal.minBuyAmount)} of ${reveal.buyAsset}`
+    );
+
+    await this.ensureApproval(reveal.buyAsset, reveal.minBuyAmount);
+
+    const hash = await this.walletClient.writeContract({
+      address: config.reactorAddress,
+      abi: reactorAbi,
+      functionName: "fillPrivateIntent",
+      args: [
+        reveal.commitment,
+        reveal.sellAsset,
+        reveal.sellAmount,
+        reveal.buyAsset,
+        reveal.minBuyAmount,
+        reveal.salt,
+      ],
+    });
+
+    console.log(`[Executor] Private fill tx submitted: ${hash}`);
+
+    const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
+    console.log(
+      `[Executor] Private fill confirmed in block ${receipt.blockNumber}:`,
+      receipt.status === "success" ? "SUCCESS" : "REVERTED"
+    );
+
+    return hash;
   }
 
   /** Check if an intent's nonce has already been used */
