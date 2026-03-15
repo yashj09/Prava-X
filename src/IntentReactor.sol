@@ -12,6 +12,7 @@ import {
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IntentLib} from "./libraries/IntentLib.sol";
 import {IXcm} from "./interfaces/IXcm.sol";
+import {IPrivacyEngine} from "./interfaces/IPrivacyEngine.sol";
 
 interface IEscrowVault {
     function lock(
@@ -26,6 +27,7 @@ interface IEscrowVault {
 
 contract IntentReactor is EIP712, ReentrancyGuard {
     using IntentLib for IntentLib.Intent;
+    using IntentLib for IntentLib.PrivateIntent;
     using SafeERC20 for IERC20;
 
     // --- Constants ---
@@ -37,6 +39,11 @@ contract IntentReactor is EIP712, ReentrancyGuard {
         public nonceUsed;
     address public escrowVault;
     address public owner;
+
+    // --- Privacy State ---
+    IPrivacyEngine public privacyEngine;
+    mapping(bytes32 commitment => address maker) public commitmentMaker;
+    mapping(bytes32 commitment => uint256 deadline) public commitmentDeadline;
 
     // --- Events ---
     event IntentFilled(
@@ -58,6 +65,22 @@ contract IntentReactor is EIP712, ReentrancyGuard {
         bytes xcmDestination
     );
 
+    event PrivateIntentSubmitted(
+        bytes32 indexed commitmentHash,
+        address indexed maker,
+        uint256 deadline
+    );
+
+    event PrivateIntentFilled(
+        bytes32 indexed commitmentHash,
+        address indexed maker,
+        address indexed filler,
+        address sellAsset,
+        uint256 sellAmount,
+        address buyAsset,
+        uint256 minBuyAmount
+    );
+
     // --- Errors ---
     error IntentExpired();
     error NonceAlreadyUsed();
@@ -67,6 +90,10 @@ contract IntentReactor is EIP712, ReentrancyGuard {
     error EscrowNotSet();
     error NotOwner();
     error ZeroAddress();
+    error PrivacyEngineNotSet();
+    error CommitmentAlreadyExists();
+    error CommitmentNotFound();
+    error CommitmentVerificationFailed();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -77,16 +104,24 @@ contract IntentReactor is EIP712, ReentrancyGuard {
         owner = msg.sender;
     }
 
-    /// @notice Set the escrow vault address for cross-chain fills
-    /// @param _escrowVault Address of the EscrowVault contract
+    // =======================================================================
+    // Configuration
+    // =======================================================================
+
     function setEscrowVault(address _escrowVault) external onlyOwner {
         if (_escrowVault == address(0)) revert ZeroAddress();
         escrowVault = _escrowVault;
     }
 
-    /// @notice Fill a same-chain intent by providing the required buy asset
-    /// @param intent The signed intent from the maker
-    /// @param signature The maker's EIP-712 signature
+    function setPrivacyEngine(address _privacyEngine) external onlyOwner {
+        if (_privacyEngine == address(0)) revert ZeroAddress();
+        privacyEngine = IPrivacyEngine(_privacyEngine);
+    }
+
+    // =======================================================================
+    // Public Intent Flow (existing — unchanged)
+    // =======================================================================
+
     function fillIntent(
         IntentLib.Intent calldata intent,
         bytes calldata signature
@@ -95,14 +130,12 @@ contract IntentReactor is EIP712, ReentrancyGuard {
 
         uint256 currentBuyAmount = intent.currentPrice();
 
-        // Transfer sell asset from maker to filler
         IERC20(intent.sellAsset).safeTransferFrom(
             intent.maker,
             msg.sender,
             intent.sellAmount
         );
 
-        // Transfer buy asset from filler to maker
         IERC20(intent.buyAsset).safeTransferFrom(
             msg.sender,
             intent.maker,
@@ -121,11 +154,6 @@ contract IntentReactor is EIP712, ReentrancyGuard {
         );
     }
 
-    /// @notice Initiate a cross-chain intent fill via XCM
-    /// @param intent The signed intent from the maker
-    /// @param signature The maker's EIP-712 signature
-    /// @param xcmDestination SCALE-encoded destination multilocation
-    /// @param xcmMessage SCALE-encoded XCM message for the target chain
     function fillIntentXCM(
         IntentLib.Intent calldata intent,
         bytes calldata signature,
@@ -136,7 +164,6 @@ contract IntentReactor is EIP712, ReentrancyGuard {
         _validateIntent(intent, signature);
         bytes32 intentHash = _hashTypedDataV4(intent.hash());
 
-        // Lock maker's sell asset in escrow
         IERC20(intent.sellAsset).safeTransferFrom(
             intent.maker,
             escrowVault,
@@ -152,7 +179,6 @@ contract IntentReactor is EIP712, ReentrancyGuard {
             intent.deadline
         );
 
-        // Send XCM message to target chain
         XCM_PRECOMPILE.send(xcmDestination, xcmMessage);
 
         emit IntentInitiatedXCM(
@@ -163,42 +189,28 @@ contract IntentReactor is EIP712, ReentrancyGuard {
         );
     }
 
-    /// @notice Cancel an intent by marking its nonce as used
-    /// @param nonce The nonce to cancel
     function cancelIntent(uint256 nonce) external {
         nonceUsed[msg.sender][nonce] = true;
         emit IntentCancelled(msg.sender, nonce);
     }
 
-    /// @notice Get the current Dutch auction price for an intent
-    function getCurrentPrice(
-        IntentLib.Intent calldata intent
-    ) external view returns (uint256) {
-        return intent.currentPrice();
-    }
+    // =======================================================================
+    // Private Intent Flow (NEW — commitment-based with Rust PVM verification)
+    // =======================================================================
 
-    /// @notice Get the EIP-712 digest for an intent (for off-chain signing)
-    function getIntentDigest(
-        IntentLib.Intent calldata intent
-    ) external view returns (bytes32) {
-        return _hashTypedDataV4(intent.hash());
-    }
-
-    /// @notice Get the EIP-712 domain separator
-    function getDomainSeparator() external view returns (bytes32) {
-        return _domainSeparatorV4();
-    }
-
-    // --- Internal ---
-
-    function _validateIntent(
-        IntentLib.Intent calldata intent,
+    /// @notice Submit a private intent with hidden parameters
+    /// @dev The commitment hides sellAsset, sellAmount, buyAsset, minBuyAmount.
+    ///      Only the commitment hash and maker are visible on-chain.
+    /// @param intent The private intent containing the commitment
+    /// @param signature The maker's EIP-712 signature over the PrivateIntent
+    function submitPrivateIntent(
+        IntentLib.PrivateIntent calldata intent,
         bytes calldata signature
-    ) internal {
+    ) external nonReentrant {
+        if (address(privacyEngine) == address(0)) revert PrivacyEngineNotSet();
         if (block.timestamp > intent.deadline) revert IntentExpired();
         if (nonceUsed[intent.maker][intent.nonce]) revert NonceAlreadyUsed();
 
-        // Exclusive filler check
         if (
             intent.exclusiveFiller != address(0) &&
             intent.exclusiveFiller != msg.sender
@@ -211,7 +223,129 @@ contract IntentReactor is EIP712, ReentrancyGuard {
         address signer = ECDSA.recover(digest, signature);
         if (signer != intent.maker) revert InvalidSignature();
 
-        // Mark nonce as used
+        // Check commitment not already used
+        if (commitmentMaker[intent.commitment] != address(0)) {
+            revert CommitmentAlreadyExists();
+        }
+
+        // Mark nonce used
+        nonceUsed[intent.maker][intent.nonce] = true;
+
+        // Store commitment
+        commitmentMaker[intent.commitment] = intent.maker;
+        commitmentDeadline[intent.commitment] = intent.deadline;
+
+        emit PrivateIntentSubmitted(
+            intent.commitment,
+            intent.maker,
+            intent.deadline
+        );
+    }
+
+    /// @notice Fill a private intent by revealing the hidden parameters
+    /// @dev The solver provides the original parameters + salt. The Rust PVM
+    ///      privacy engine verifies the reveal matches the stored commitment.
+    /// @param commitment The commitment hash from submitPrivateIntent
+    /// @param sellAsset The revealed sell asset address
+    /// @param sellAmount The revealed sell amount
+    /// @param buyAsset The revealed buy asset address
+    /// @param minBuyAmount The revealed minimum buy amount
+    /// @param salt The salt used when creating the commitment
+    function fillPrivateIntent(
+        bytes32 commitment,
+        address sellAsset,
+        uint256 sellAmount,
+        address buyAsset,
+        uint256 minBuyAmount,
+        bytes32 salt
+    ) external nonReentrant {
+        if (address(privacyEngine) == address(0)) revert PrivacyEngineNotSet();
+
+        address maker = commitmentMaker[commitment];
+        if (maker == address(0)) revert CommitmentNotFound();
+
+        uint256 deadline = commitmentDeadline[commitment];
+        if (block.timestamp > deadline) revert IntentExpired();
+
+        // Cross-VM call: Solidity -> Rust PVM privacy engine
+        // Verifies that the revealed parameters produce the stored commitment
+        bool valid = privacyEngine.verifyCommitment(
+            commitment,
+            bytes32(uint256(uint160(sellAsset))),
+            sellAmount,
+            bytes32(uint256(uint160(buyAsset))),
+            minBuyAmount,
+            salt
+        );
+        if (!valid) revert CommitmentVerificationFailed();
+
+        // Clear commitment (prevent replay)
+        delete commitmentMaker[commitment];
+        delete commitmentDeadline[commitment];
+
+        // Execute the swap
+        IERC20(sellAsset).safeTransferFrom(maker, msg.sender, sellAmount);
+        IERC20(buyAsset).safeTransferFrom(msg.sender, maker, minBuyAmount);
+
+        emit PrivateIntentFilled(
+            commitment,
+            maker,
+            msg.sender,
+            sellAsset,
+            sellAmount,
+            buyAsset,
+            minBuyAmount
+        );
+    }
+
+    // =======================================================================
+    // View functions
+    // =======================================================================
+
+    function getCurrentPrice(
+        IntentLib.Intent calldata intent
+    ) external view returns (uint256) {
+        return intent.currentPrice();
+    }
+
+    function getIntentDigest(
+        IntentLib.Intent calldata intent
+    ) external view returns (bytes32) {
+        return _hashTypedDataV4(intent.hash());
+    }
+
+    function getPrivateIntentDigest(
+        IntentLib.PrivateIntent calldata intent
+    ) external view returns (bytes32) {
+        return _hashTypedDataV4(intent.hash());
+    }
+
+    function getDomainSeparator() external view returns (bytes32) {
+        return _domainSeparatorV4();
+    }
+
+    // =======================================================================
+    // Internal
+    // =======================================================================
+
+    function _validateIntent(
+        IntentLib.Intent calldata intent,
+        bytes calldata signature
+    ) internal {
+        if (block.timestamp > intent.deadline) revert IntentExpired();
+        if (nonceUsed[intent.maker][intent.nonce]) revert NonceAlreadyUsed();
+
+        if (
+            intent.exclusiveFiller != address(0) &&
+            intent.exclusiveFiller != msg.sender
+        ) {
+            revert ExclusiveFillerViolation();
+        }
+
+        bytes32 digest = _hashTypedDataV4(intent.hash());
+        address signer = ECDSA.recover(digest, signature);
+        if (signer != intent.maker) revert InvalidSignature();
+
         nonceUsed[intent.maker][intent.nonce] = true;
     }
 }

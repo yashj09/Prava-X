@@ -39,6 +39,39 @@ library IntentLib {
         );
     }
 
+    // -----------------------------------------------------------------------
+    // Private Intent (commitment-based, amounts hidden until fill)
+    // -----------------------------------------------------------------------
+
+    struct PrivateIntent {
+        address maker;
+        bytes32 commitment; // blake2s(sellAsset || sellAmount || buyAsset || minBuyAmount || salt)
+        uint256 deadline;
+        uint256 nonce;
+        address exclusiveFiller;
+    }
+
+    bytes32 internal constant PRIVATE_INTENT_TYPEHASH = keccak256(
+        "PrivateIntent(address maker,bytes32 commitment,uint256 deadline,uint256 nonce,address exclusiveFiller)"
+    );
+
+    function hash(PrivateIntent calldata intent) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                PRIVATE_INTENT_TYPEHASH,
+                intent.maker,
+                intent.commitment,
+                intent.deadline,
+                intent.nonce,
+                intent.exclusiveFiller
+            )
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Dutch auction math
+    // -----------------------------------------------------------------------
+
     /// @notice Calculate the current buy amount based on Dutch auction decay
     /// @dev Linear decay from startBuyAmount to minBuyAmount over the decay period
     /// @param intent The intent with decay parameters
