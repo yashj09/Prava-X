@@ -9,17 +9,22 @@ build = "build.rs"
 name = "rust-privacy-engine"
 path = "src/rust-privacy-engine.rs"
 
+[features]
+default = []
+pedersen = ["ark-ff", "ark-ec", "ark-std", "ark-serialize", "ark-ed-on-bls12-381"]
+
 [dependencies]
 pallet-revive-uapi = { version = "0.10", default-features = false }
 polkavm-derive = { version = "0.31.0" }
+blake2 = { version = "0.10", default-features = false, optional = true }
 
-# Crypto (arkworks) - test if these compile to PVM
-ark-ff = { version = "0.4", default-features = false }
-ark-ec = { version = "0.4", default-features = false }
-ark-std = { version = "0.4", default-features = false }
-ark-serialize = { version = "0.4", default-features = false }
-ark-ed-on-bls12-381 = { version = "0.4", default-features = false }
-blake2 = { version = "0.10", default-features = false }
+# Crypto (arkworks) - behind "pedersen" feature
+# Compiles to PVM but exceeds BasicBlockTooLarge at deployment
+ark-ff = { version = "0.4", default-features = false, optional = true }
+ark-ec = { version = "0.4", default-features = false, optional = true }
+ark-std = { version = "0.4", default-features = false, optional = true }
+ark-serialize = { version = "0.4", default-features = false, optional = true }
+ark-ed-on-bls12-381 = { version = "0.4", default-features = false, optional = true }
 
 [build-dependencies]
 cargo-pvm-contract-builder = "0.3.0"
