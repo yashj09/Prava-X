@@ -51,6 +51,25 @@
   },
   {
     "type": "function",
+    "name": "commitmentExclusiveFiller",
+    "inputs": [
+      {
+        "name": "commitment",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "filler",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "commitmentMaker",
     "inputs": [
       {
@@ -67,6 +86,19 @@
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "completeXCMFill",
+    "inputs": [
+      {
+        "name": "intentHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -591,6 +623,45 @@
   },
   {
     "type": "function",
+    "name": "setSolverRegistry",
+    "inputs": [
+      {
+        "name": "_solverRegistry",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "slashSolver",
+    "inputs": [
+      {
+        "name": "solver",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "solverRegistry",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract ISolverRegistry"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "submitPrivateIntent",
     "inputs": [
       {
@@ -888,6 +959,11 @@
   {
     "type": "error",
     "name": "NonceAlreadyUsed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotActiveSolver",
     "inputs": []
   },
   {

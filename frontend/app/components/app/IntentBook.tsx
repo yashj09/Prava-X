@@ -93,39 +93,45 @@ function getTimeRemaining(deadline: number): string {
   return `${Math.floor(diff / 60)}m left`;
 }
 
-function getIntentStatus(intent: SignedIntent): IntentStatus {
+function getIntentStatus(intent: SignedIntent, now: number): IntentStatus {
   if (intent.status === "filled") return "filled";
-  if (intent.isPrivate) return "private";
-  const now = Math.floor(Date.now() / 1000);
   if (intent.deadline <= now) return "expired";
+  if (intent.isPrivate) return "private";
   return intent.status;
 }
 
 /** Hook to subscribe to intent store changes */
 export function useIntentStore() {
-  const [intents, setIntents] = useState<SignedIntent[]>([]);
+  const [intents, setIntents] = useState<SignedIntent[]>(() => loadIntents());
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
 
   const refresh = useCallback(() => {
     setIntents(loadIntents());
   }, []);
 
   useEffect(() => {
-    refresh();
     const handler = () => refresh();
+    const timer = window.setInterval(() => {
+      setNow(Math.floor(Date.now() / 1000));
+    }, 1000);
+
     window.addEventListener("intents-updated", handler);
-    return () => window.removeEventListener("intents-updated", handler);
+    return () => {
+      window.removeEventListener("intents-updated", handler);
+      window.clearInterval(timer);
+    };
   }, [refresh]);
 
-  return { intents, refresh };
+  return { intents, refresh, now };
 }
 
 export function IntentBook() {
   const { address } = useAccount();
-  const { intents, refresh } = useIntentStore();
+  const { intents, refresh, now } = useIntentStore();
 
   const displayIntents = intents.map((intent) => ({
     ...intent,
-    currentStatus: getIntentStatus(intent),
+    currentStatus: getIntentStatus(intent, now),
   }));
 
   return (
@@ -268,6 +274,9 @@ export function IntentBook() {
       {/* Footer note */}
       <p className="text-center text-xs text-muted-light pt-4 font-[family-name:var(--font-body)]">
         Private intents show only commitment hashes. Parameters revealed at fill time.
+      </p>
+      <p className="text-center text-[10px] text-muted-light/60 pt-1 font-[family-name:var(--font-body)]">
+        Demo: Intent book is stored in browser localStorage. In production, intents would be relayed via a P2P gossip network or solver API.
       </p>
     </div>
   );

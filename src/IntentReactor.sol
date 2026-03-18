@@ -23,6 +23,12 @@ interface IEscrowVault {
         uint256 amount,
         uint256 deadline
     ) external;
+    function release(bytes32 intentHash) external;
+}
+
+interface ISolverRegistry {
+    function isActiveSolver(address solver) external view returns (bool);
+    function slash(address solver) external;
 }
 
 contract IntentReactor is EIP712, ReentrancyGuard {
@@ -38,12 +44,14 @@ contract IntentReactor is EIP712, ReentrancyGuard {
     mapping(address maker => mapping(uint256 nonce => bool used))
         public nonceUsed;
     address public escrowVault;
+    ISolverRegistry public solverRegistry;
     address public owner;
 
     // --- Privacy State ---
     IPrivacyEngine public privacyEngine;
     mapping(bytes32 commitment => address maker) public commitmentMaker;
     mapping(bytes32 commitment => uint256 deadline) public commitmentDeadline;
+    mapping(bytes32 commitment => address filler) public commitmentExclusiveFiller;
 
     // --- Events ---
     event IntentFilled(
@@ -90,6 +98,7 @@ contract IntentReactor is EIP712, ReentrancyGuard {
     error EscrowNotSet();
     error NotOwner();
     error ZeroAddress();
+    error NotActiveSolver();
     error PrivacyEngineNotSet();
     error CommitmentAlreadyExists();
     error CommitmentNotFound();
@@ -118,6 +127,11 @@ contract IntentReactor is EIP712, ReentrancyGuard {
         privacyEngine = IPrivacyEngine(_privacyEngine);
     }
 
+    function setSolverRegistry(address _solverRegistry) external onlyOwner {
+        if (_solverRegistry == address(0)) revert ZeroAddress();
+        solverRegistry = ISolverRegistry(_solverRegistry);
+    }
+
     // =======================================================================
     // Public Intent Flow (existing — unchanged)
     // =======================================================================
@@ -126,6 +140,7 @@ contract IntentReactor is EIP712, ReentrancyGuard {
         IntentLib.Intent calldata intent,
         bytes calldata signature
     ) external nonReentrant {
+        _requireActiveSolver();
         _validateIntent(intent, signature);
 
         uint256 currentBuyAmount = intent.currentPrice();
@@ -160,6 +175,7 @@ contract IntentReactor is EIP712, ReentrancyGuard {
         bytes calldata xcmDestination,
         bytes calldata xcmMessage
     ) external nonReentrant {
+        _requireActiveSolver();
         if (escrowVault == address(0)) revert EscrowNotSet();
         _validateIntent(intent, signature);
         bytes32 intentHash = _hashTypedDataV4(intent.hash());
@@ -189,6 +205,22 @@ contract IntentReactor is EIP712, ReentrancyGuard {
         );
     }
 
+    /// @notice Complete a cross-chain fill by releasing escrowed funds to the solver
+    /// @dev Called after XCM confirmation is received. Only owner for now;
+    ///      in production this would be triggered by an XCM callback or oracle.
+    function completeXCMFill(bytes32 intentHash) external onlyOwner {
+        if (escrowVault == address(0)) revert EscrowNotSet();
+        IEscrowVault(escrowVault).release(intentHash);
+    }
+
+    /// @notice Manually slash a solver by 10% using the linked registry.
+    /// @dev This provides an operational path for failed fill handling until
+    ///      slash decisions are automated by protocol callbacks.
+    function slashSolver(address solver) external onlyOwner {
+        if (address(solverRegistry) == address(0)) revert ZeroAddress();
+        solverRegistry.slash(solver);
+    }
+
     function cancelIntent(uint256 nonce) external {
         nonceUsed[msg.sender][nonce] = true;
         emit IntentCancelled(msg.sender, nonce);
@@ -211,13 +243,6 @@ contract IntentReactor is EIP712, ReentrancyGuard {
         if (block.timestamp > intent.deadline) revert IntentExpired();
         if (nonceUsed[intent.maker][intent.nonce]) revert NonceAlreadyUsed();
 
-        if (
-            intent.exclusiveFiller != address(0) &&
-            intent.exclusiveFiller != msg.sender
-        ) {
-            revert ExclusiveFillerViolation();
-        }
-
         // Verify EIP-712 signature
         bytes32 digest = _hashTypedDataV4(intent.hash());
         address signer = ECDSA.recover(digest, signature);
@@ -231,9 +256,12 @@ contract IntentReactor is EIP712, ReentrancyGuard {
         // Mark nonce used
         nonceUsed[intent.maker][intent.nonce] = true;
 
-        // Store commitment
+        // Store commitment + exclusive filler
         commitmentMaker[intent.commitment] = intent.maker;
         commitmentDeadline[intent.commitment] = intent.deadline;
+        if (intent.exclusiveFiller != address(0)) {
+            commitmentExclusiveFiller[intent.commitment] = intent.exclusiveFiller;
+        }
 
         emit PrivateIntentSubmitted(
             intent.commitment,
@@ -259,10 +287,17 @@ contract IntentReactor is EIP712, ReentrancyGuard {
         uint256 minBuyAmount,
         bytes32 salt
     ) external nonReentrant {
+        _requireActiveSolver();
         if (address(privacyEngine) == address(0)) revert PrivacyEngineNotSet();
 
         address maker = commitmentMaker[commitment];
         if (maker == address(0)) revert CommitmentNotFound();
+
+        // Enforce exclusive filler if set
+        address exclusive = commitmentExclusiveFiller[commitment];
+        if (exclusive != address(0) && exclusive != msg.sender) {
+            revert ExclusiveFillerViolation();
+        }
 
         uint256 deadline = commitmentDeadline[commitment];
         if (block.timestamp > deadline) revert IntentExpired();
@@ -282,6 +317,7 @@ contract IntentReactor is EIP712, ReentrancyGuard {
         // Clear commitment (prevent replay)
         delete commitmentMaker[commitment];
         delete commitmentDeadline[commitment];
+        delete commitmentExclusiveFiller[commitment];
 
         // Execute the swap
         IERC20(sellAsset).safeTransferFrom(maker, msg.sender, sellAmount);
@@ -327,6 +363,12 @@ contract IntentReactor is EIP712, ReentrancyGuard {
     // =======================================================================
     // Internal
     // =======================================================================
+
+    function _requireActiveSolver() internal view {
+        if (address(solverRegistry) != address(0)) {
+            if (!solverRegistry.isActiveSolver(msg.sender)) revert NotActiveSolver();
+        }
+    }
 
     function _validateIntent(
         IntentLib.Intent calldata intent,

@@ -38,11 +38,19 @@ contract DeployScript is Script {
         reactor.setPrivacyEngine(privacyEngineAddress);
         console.log("PrivacyEngine linked at:", privacyEngineAddress);
 
-        // 6. Deploy MockUSDC test token and mint to deployer
+        // 6. Link solver registry so active-solver checks are enforced
+        reactor.setSolverRegistry(address(registry));
+        console.log("SolverRegistry linked to IntentReactor");
+
+        // 7. Deploy mock test tokens and mint to deployer
         MockERC20 mockUsdc = new MockERC20("Mock USDC", "USDC", 6);
+        MockERC20 mockDot = new MockERC20("Mock DOT", "DOT", 18);
         mockUsdc.mint(deployer, 1_000 * 1e6); // 1k USDC
+        mockDot.mint(deployer, 100 * 1e18); // 100 DOT
         console.log("MockUSDC deployed at:", address(mockUsdc));
         console.log("Minted 1,000 USDC to deployer");
+        console.log("MockDOT deployed at:", address(mockDot));
+        console.log("Minted 100 DOT to deployer");
 
         vm.stopBroadcast();
 
@@ -52,5 +60,6 @@ contract DeployScript is Script {
         console.log("SolverRegistry: ", address(registry));
         console.log("PrivacyEngine:  ", privacyEngineAddress);
         console.log("MockUSDC:       ", address(mockUsdc));
+        console.log("MockDOT:        ", address(mockDot));
     }
 }

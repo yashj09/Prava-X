@@ -390,7 +390,7 @@ export function CreateIntent() {
                 <rect x="1.5" y="5" width="9" height="5.5" rx="1.5" stroke="currentColor" strokeWidth="1" fill="none" />
                 <path d="M3.5 5V3.5a2.5 2.5 0 0 1 5 0V5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
               </svg>
-              Commitment will be generated via Rust PVM privacy engine
+              Commitment computed locally and stored on-chain; reveal verified later by the Rust PVM privacy engine
             </div>
           </div>
         )}
@@ -427,16 +427,16 @@ export function CreateIntent() {
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M3 8L6.5 11.5L13 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            Intent Signed
+            {isPrivate ? "Intent Submitted" : "Intent Signed"}
           </span>
         ) : status === "error" ? (
-          "Signing Failed"
+          "Transaction Failed"
         ) : !isConnected ? (
           "Connect Wallet First"
         ) : insufficientBalance ? (
           `Insufficient ${sellToken} Balance`
         ) : isPrivate ? (
-          "Sign Private Intent"
+          "Sign & Submit Private Intent"
         ) : (
           "Sign Intent"
         )}
@@ -445,7 +445,9 @@ export function CreateIntent() {
       {/* Info */}
       <p className="text-center text-xs text-muted-light font-[family-name:var(--font-body)]">
         {isConnected
-          ? "Intent is signed off-chain (gasless). No transaction until a solver fills it."
+          ? isPrivate
+            ? "Private intents require on-chain approval + commitment submission. The later reveal is verified by the Rust PVM."
+            : "Public intents are signed off-chain (gasless). No transaction until a solver fills it."
           : "Connect your wallet to sign intents on Polkadot Hub TestNet."}
       </p>
     </form>

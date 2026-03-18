@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAccount, useWriteContract } from "wagmi";
 import { formatEther, erc20Abi, maxUint256 } from "viem";
 import { toast } from "sonner";
@@ -9,6 +9,7 @@ import { CONTRACTS } from "../../config/contracts";
 import { polkadotHub } from "../../config/wagmi";
 import { useIntentStore, updateIntentStatus, type SignedIntent } from "./IntentBook";
 import intentReactorAbi from "../../config/abi/IntentReactor.json";
+import solverRegistryAbi from "../../config/abi/SolverRegistry.json";
 
 export function SolverPanel() {
   const { address, isConnected } = useAccount();
@@ -17,6 +18,7 @@ export function SolverPanel() {
   const [txStatus, setTxStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
   const [fillStatus, setFillStatus] = useState<Record<string, "idle" | "filling" | "filled" | "error">>({});
   const [fillTxHash, setFillTxHash] = useState<Record<string, string>>({});
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const { stake, isPending: isStaking } = useSolverStake();
   const { stake: onChainStake, isActive, refetch: refetchSolver } = useSolverInfo(address);
   const pasBalance = useTokenBalance(address, "PAS");
@@ -28,8 +30,14 @@ export function SolverPanel() {
   const stakedAmount = onChainStake ? formatEther(onChainStake) : "0";
   const isActiveSolver = isActive === true;
 
-  const now = Math.floor(Date.now() / 1000);
   const fillableIntents = intents.filter((i) => i.status !== "filled" && i.deadline > now);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNow(Math.floor(Date.now() / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const handleStake = async () => {
     if (!stakeAmount || !isConnected) return;
@@ -45,6 +53,60 @@ export function SolverPanel() {
       setTimeout(() => setTxStatus("idle"), 3000);
     } catch (err) {
       console.error("Stake failed:", err);
+      setTxStatus("error");
+      setTimeout(() => setTxStatus("idle"), 3000);
+    }
+  };
+
+  const handleUnstake = async () => {
+    if (!isConnected || !onChainStake || onChainStake === 0n) return;
+    setTxStatus("pending");
+    try {
+      await writeContractAsync({
+        address: CONTRACTS.solverRegistry,
+        abi: solverRegistryAbi,
+        functionName: "requestUnstake",
+        args: [onChainStake],
+        chainId: polkadotHub.id,
+      });
+      setTxStatus("success");
+      toast.success("Unstake Requested", {
+        description: "Funds will be available to withdraw after 1 hour.",
+        duration: 6000,
+      });
+      setTimeout(() => {
+        refetchSolver();
+        setTxStatus("idle");
+      }, 3000);
+    } catch (err) {
+      console.error("Unstake failed:", err);
+      setTxStatus("error");
+      setTimeout(() => setTxStatus("idle"), 3000);
+    }
+  };
+
+  const handleWithdraw = async () => {
+    if (!isConnected) return;
+    setTxStatus("pending");
+    try {
+      await writeContractAsync({
+        address: CONTRACTS.solverRegistry,
+        abi: solverRegistryAbi,
+        functionName: "withdraw",
+        chainId: polkadotHub.id,
+      });
+      setTxStatus("success");
+      toast.success("Withdrawal Complete", { description: "Staked PAS returned to your wallet." });
+      setTimeout(() => {
+        refetchSolver();
+        pasBalance.refetch();
+        setTxStatus("idle");
+      }, 3000);
+    } catch (err) {
+      console.error("Withdraw failed:", err);
+      toast.error("Withdraw Failed", {
+        description: "Unstake delay may not have passed yet (1 hour).",
+      });
       setTxStatus("error");
       setTimeout(() => setTxStatus("idle"), 3000);
     }
@@ -244,7 +306,7 @@ export function SolverPanel() {
               </svg>
               <span>
                 Minimum stake: <strong>0.1 PAS</strong>. Unstaking requires a 1-hour delay.
-                Failed fills result in 10% slash of staked amount.
+                Failed fills can be manually slashed by the protocol for 10% of the staked amount.
               </span>
             </div>
           </div>
@@ -273,10 +335,18 @@ export function SolverPanel() {
               {isStaking ? "Confirming..." : !isConnected ? "Connect Wallet" : "Stake PAS"}
             </button>
             <button
-              disabled={!isActiveSolver}
-              className="h-12 px-6 rounded-xl border border-foreground/10 text-foreground font-[family-name:var(--font-display)] font-medium text-sm transition-all hover:border-polkadot/30 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+              onClick={handleUnstake}
+              disabled={!isActiveSolver || txStatus === "pending"}
+              className="h-12 px-4 rounded-xl border border-foreground/10 text-foreground font-[family-name:var(--font-display)] font-medium text-sm transition-all hover:border-polkadot/30 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
             >
               Unstake
+            </button>
+            <button
+              onClick={handleWithdraw}
+              disabled={txStatus === "pending"}
+              className="h-12 px-4 rounded-xl border border-foreground/10 text-foreground font-[family-name:var(--font-display)] font-medium text-sm transition-all hover:border-danger/30 hover:text-danger cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              Withdraw
             </button>
           </div>
         </div>
