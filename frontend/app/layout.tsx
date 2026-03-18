@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Syne, DM_Sans } from "next/font/google";
 import { Web3Provider } from "./providers/Web3Provider";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const syne = Syne({
@@ -32,7 +33,18 @@ export default function RootLayout({
         className={`${syne.variable} ${dmSans.variable} antialiased`}
         suppressHydrationWarning
       >
-        <Web3Provider>{children}</Web3Provider>
+        <Web3Provider>
+          {children}
+          <Toaster
+            position="bottom-right"
+            toastOptions={{
+              style: {
+                fontFamily: "var(--font-dm-sans)",
+                borderRadius: "12px",
+              },
+            }}
+          />
+        </Web3Provider>
       </body>
     </html>
   );

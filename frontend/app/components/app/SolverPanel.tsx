@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAccount, useWriteContract } from "wagmi";
 import { formatEther, erc20Abi, maxUint256 } from "viem";
+import { toast } from "sonner";
 import { useSolverStake, useSolverInfo, useTokenBalance } from "../../config/hooks";
 import { CONTRACTS } from "../../config/contracts";
 import { polkadotHub } from "../../config/wagmi";
@@ -109,6 +110,20 @@ export function SolverPanel() {
       setFillStatus((prev) => ({ ...prev, [intent.id]: "filled" }));
       if (txHash) setFillTxHash((prev) => ({ ...prev, [intent.id]: txHash }));
       updateIntentStatus(intent.id, "filled");
+
+      // Toast with block explorer link
+      if (txHash) {
+        const explorerUrl = `https://blockscout-testnet.polkadot.io/tx/${txHash}`;
+        toast.success("Intent Filled", {
+          description: `${intent.isPrivate ? "Private intent" : `${intent.sellAmount} ${intent.sellAsset} → ${intent.buyAmount} ${intent.buyAsset}`} filled successfully.`,
+          action: {
+            label: "View on Explorer",
+            onClick: () => window.open(explorerUrl, "_blank"),
+          },
+          duration: 10000,
+        });
+      }
+
       // Refetch balances after a short delay for chain confirmation
       setTimeout(() => {
         usdcBalance.refetch();
@@ -117,6 +132,10 @@ export function SolverPanel() {
       }, 2000);
     } catch (err) {
       console.error("Fill failed:", err);
+      toast.error("Fill Failed", {
+        description: err instanceof Error ? err.message.slice(0, 100) : "Transaction reverted. Check console for details.",
+        duration: 6000,
+      });
       setFillStatus((prev) => ({ ...prev, [intent.id]: "error" }));
       setTimeout(() => {
         setFillStatus((prev) => ({ ...prev, [intent.id]: "idle" }));
