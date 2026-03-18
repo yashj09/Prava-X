@@ -1,15 +1,21 @@
 "use client";
 
-import { useReadContract, useWriteContract, useSignTypedData } from "wagmi";
-import { parseEther } from "viem";
-import { CONTRACTS } from "./contracts";
+import { useReadContract, useWriteContract, useSignTypedData, useBalance } from "wagmi";
+import { parseEther, erc20Abi } from "viem";
+import { CONTRACTS, TOKENS } from "./contracts";
+import { polkadotHub } from "./wagmi";
 import intentReactorAbi from "./abi/IntentReactor.json";
 import solverRegistryAbi from "./abi/SolverRegistry.json";
 
+const CHAIN_ID = polkadotHub.id;
+
 // EIP-712 domain for intent signing
+// Must include chainId + verifyingContract to match OpenZeppelin's EIP712 in the contract
 const EIP712_DOMAIN = {
   name: "XCMIntents",
   version: "1",
+  chainId: CHAIN_ID,
+  verifyingContract: CONTRACTS.intentReactor,
 } as const;
 
 const PRIVATE_INTENT_TYPES = {
@@ -51,16 +57,15 @@ export function useSignIntent() {
     minBuyAmount: bigint;
     startBuyAmount: bigint;
     deadline: bigint;
+    decayStartTime: bigint;
     nonce: bigint;
   }) => {
-    const now = BigInt(Math.floor(Date.now() / 1000));
     return signTypedDataAsync({
       domain: EIP712_DOMAIN,
       types: INTENT_TYPES,
       primaryType: "Intent",
       message: {
         ...params,
-        decayStartTime: now,
         exclusiveFiller: "0x0000000000000000000000000000000000000000" as const,
       },
     });
@@ -104,6 +109,7 @@ export function useSolverStake() {
       abi: solverRegistryAbi,
       functionName: "stake",
       value: parseEther(amount),
+      chainId: CHAIN_ID,
     });
   };
 
@@ -111,25 +117,33 @@ export function useSolverStake() {
 }
 
 export function useSolverInfo(address: `0x${string}` | undefined) {
-  const { data: stakeData } = useReadContract({
+  const { data: stakeData, refetch: refetchStake } = useReadContract({
     address: CONTRACTS.solverRegistry,
     abi: solverRegistryAbi,
     functionName: "getStake",
     args: address ? [address] : undefined,
+    chainId: CHAIN_ID,
     query: { enabled: !!address },
   });
 
-  const { data: isActive } = useReadContract({
+  const { data: isActive, refetch: refetchActive } = useReadContract({
     address: CONTRACTS.solverRegistry,
     abi: solverRegistryAbi,
     functionName: "isActiveSolver",
     args: address ? [address] : undefined,
+    chainId: CHAIN_ID,
     query: { enabled: !!address },
   });
+
+  const refetch = () => {
+    refetchStake();
+    refetchActive();
+  };
 
   return {
     stake: stakeData as bigint | undefined,
     isActive: isActive as boolean | undefined,
+    refetch,
   };
 }
 
@@ -144,8 +158,60 @@ export function useNonceUsed(
     abi: intentReactorAbi,
     functionName: "nonceUsed",
     args: maker && nonce !== undefined ? [maker, nonce] : undefined,
+    chainId: CHAIN_ID,
     query: { enabled: !!maker && nonce !== undefined },
   });
 
   return data as boolean | undefined;
+}
+
+// --- Token Balances ---
+
+export function useTokenBalance(
+  address: `0x${string}` | undefined,
+  tokenSymbol: string
+) {
+  const token = TOKENS.find((t) => t.symbol === tokenSymbol);
+  const isNative = !token?.address;
+
+  const { data: nativeBalance, refetch: refetchNative } = useBalance({
+    address,
+    chainId: CHAIN_ID,
+    query: { enabled: !!address && isNative },
+  });
+
+  const { data: erc20Balance, refetch: refetchErc20 } = useReadContract({
+    address: token?.address as `0x${string}` | undefined,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    chainId: CHAIN_ID,
+    query: { enabled: !!address && !isNative && !!token?.address },
+  });
+
+  const refetch = () => {
+    if (isNative) refetchNative();
+    else refetchErc20();
+  };
+
+  if (isNative) {
+    const val = nativeBalance?.value;
+    return {
+      balance: val,
+      decimals: 18,
+      formatted: val != null ? (Number(val) / 1e18).toFixed(4) : undefined,
+      refetch,
+    };
+  }
+
+  return {
+    balance: erc20Balance as bigint | undefined,
+    decimals: token?.decimals ?? 18,
+    formatted: erc20Balance != null
+      ? (Number(erc20Balance as bigint) / 10 ** (token?.decimals ?? 18)).toFixed(
+          token?.decimals === 6 ? 2 : 4
+        )
+      : undefined,
+    refetch,
+  };
 }

@@ -9,14 +9,22 @@ export const CONTRACTS = {
     "0x0000000000000000000000000000000000000000") as `0x${string}`,
   mockUsdc: (process.env.NEXT_PUBLIC_MOCK_USDC_ADDRESS ??
     "0x0000000000000000000000000000000000000000") as `0x${string}`,
+  mockDot: (process.env.NEXT_PUBLIC_MOCK_DOT_ADDRESS ??
+    "0x0000000000000000000000000000000000000000") as `0x${string}`,
 } as const;
 
+// Only ERC20 tokens for intents (native PAS can't be used with safeTransferFrom)
 export const TOKENS = [
-  { symbol: "PAS", name: "PAS Token", address: null, decimals: 18 },
   {
     symbol: "USDC",
     name: "Mock USDC",
     address: CONTRACTS.mockUsdc,
     decimals: 6,
+  },
+  {
+    symbol: "DOT",
+    name: "Mock DOT",
+    address: CONTRACTS.mockDot,
+    decimals: 18,
   },
 ] as const;
