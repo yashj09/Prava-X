@@ -1,15 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import { useAccount } from "wagmi";
-import { parseUnits, keccak256, encodePacked } from "viem";
-import { TOKENS } from "../../config/contracts";
-import { useSignIntent, useSignPrivateIntent } from "../../config/hooks";
+import { useState, useRef } from "react";
+import { useAccount, useWriteContract, useReadContract } from "wagmi";
+import { parseUnits, keccak256, encodePacked, pad, formatUnits, erc20Abi, maxUint256 } from "viem";
+import { CONTRACTS, TOKENS } from "../../config/contracts";
+import { polkadotHub } from "../../config/wagmi";
+import { useSignIntent, useSignPrivateIntent, useTokenBalance } from "../../config/hooks";
+import { addSessionIntent } from "./IntentBook";
+import intentReactorAbi from "../../config/abi/IntentReactor.json";
 
 export function CreateIntent() {
   const { address, isConnected } = useAccount();
   const [sellToken, setSellToken] = useState("USDC");
-  const [buyToken, setBuyToken] = useState("PAS");
+  const [buyToken, setBuyToken] = useState("DOT");
   const [sellAmount, setSellAmount] = useState("");
   const [buyAmount, setBuyAmount] = useState("");
   const [deadline, setDeadline] = useState("30");
@@ -19,6 +22,23 @@ export function CreateIntent() {
 
   const { signIntent, isPending: isSigningPublic } = useSignIntent();
   const { signPrivateIntent, isPending: isSigningPrivate } = useSignPrivateIntent();
+
+  const sellBalance = useTokenBalance(address, sellToken);
+  const buyBalance = useTokenBalance(address, buyToken);
+  const { writeContractAsync } = useWriteContract();
+
+  const isSubmittingRef = useRef(false);
+  const sellTokenAddr = TOKENS.find((t) => t.symbol === sellToken)?.address as `0x${string}` | undefined;
+
+  // Check current allowance for sell token → reactor
+  const { data: currentAllowance, refetch: refetchAllowance } = useReadContract({
+    address: sellTokenAddr,
+    abi: erc20Abi,
+    functionName: "allowance",
+    args: address ? [address, CONTRACTS.intentReactor] : undefined,
+    chainId: polkadotHub.id,
+    query: { enabled: !!address && !!sellTokenAddr },
+  });
 
   const getTokenAddress = (symbol: string): `0x${string}` => {
     const token = TOKENS.find((t) => t.symbol === symbol);
@@ -30,41 +50,127 @@ export function CreateIntent() {
     return token?.decimals ?? 18;
   };
 
+  const handleSwapTokens = () => {
+    setSellToken(buyToken);
+    setBuyToken(sellToken);
+    setSellAmount(buyAmount);
+    setBuyAmount(sellAmount);
+  };
+
+  const handleMax = () => {
+    if (sellBalance.balance != null) {
+      const decimals = getTokenDecimals(sellToken);
+      const formatted = formatUnits(sellBalance.balance, decimals);
+      // Leave a small amount for gas if selling native token
+      if (sellToken === "PAS") {
+        const val = Math.max(0, parseFloat(formatted) - 0.1);
+        setSellAmount(val > 0 ? val.toString() : "0");
+      } else {
+        setSellAmount(formatted);
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!address || !sellAmount || !buyAmount) return;
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
 
     setStatus("signing");
     const nonce = BigInt(Math.floor(Math.random() * 1_000_000));
     const deadlineBigInt = BigInt(Math.floor(Date.now() / 1000) + Number(deadline) * 60);
+    const parsedSellWei = parseUnits(sellAmount, getTokenDecimals(sellToken));
 
     try {
+      // Approve reactor to spend sell tokens if needed
+      const allowance = (currentAllowance as bigint) ?? 0n;
+      if (allowance < parsedSellWei) {
+        await writeContractAsync({
+          address: getTokenAddress(sellToken),
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [CONTRACTS.intentReactor, maxUint256],
+          chainId: polkadotHub.id,
+        });
+        refetchAllowance();
+      }
+
       if (isPrivate) {
-        // Generate commitment hash from parameters
+        const parsedSell = parseUnits(sellAmount, getTokenDecimals(sellToken));
+        const parsedBuy = parseUnits(buyAmount, getTokenDecimals(buyToken));
+
         const salt = keccak256(encodePacked(["uint256", "address"], [nonce, address]));
+
+        // Commitment must match Rust PVM engine: keccak256 of 5 x 32-byte words
+        // Addresses are left-padded to bytes32 (matches Solidity's bytes32(uint256(uint160(addr))))
+        const sellAssetBytes32 = pad(getTokenAddress(sellToken), { size: 32 });
+        const buyAssetBytes32 = pad(getTokenAddress(buyToken), { size: 32 });
         const commitment = keccak256(
           encodePacked(
-            ["address", "uint256", "address", "uint256", "bytes32"],
-            [
-              getTokenAddress(sellToken),
-              parseUnits(sellAmount, getTokenDecimals(sellToken)),
-              getTokenAddress(buyToken),
-              parseUnits(buyAmount, getTokenDecimals(buyToken)),
-              salt,
-            ]
+            ["bytes32", "uint256", "bytes32", "uint256", "bytes32"],
+            [sellAssetBytes32, parsedSell, buyAssetBytes32, parsedBuy, salt]
           )
         );
 
+        const exclusiveFiller = "0x0000000000000000000000000000000000000000" as const;
+
+        // Step 1: Sign the private intent off-chain (EIP-712)
         const sig = await signPrivateIntent({
           maker: address,
           commitment,
           deadline: deadlineBigInt,
           nonce,
         });
+
+        // Step 2: Submit the private intent on-chain (stores commitment)
+        const privateIntentTuple = [
+          address,
+          commitment,
+          deadlineBigInt,
+          nonce,
+          exclusiveFiller,
+        ] as const;
+
+        await writeContractAsync({
+          address: CONTRACTS.intentReactor,
+          abi: intentReactorAbi,
+          functionName: "submitPrivateIntent",
+          args: [privateIntentTuple, sig],
+          chainId: polkadotHub.id,
+        });
+
         setSigResult(sig);
+        addSessionIntent({
+          id: `0x${sig.slice(2, 8)}...${sig.slice(-4)}`,
+          sellAsset: sellToken,
+          sellAmount: sellAmount,
+          buyAsset: buyToken,
+          buyAmount: buyAmount,
+          deadline: Number(deadlineBigInt),
+          status: "active",
+          isPrivate: true,
+          signature: sig,
+          createdAt: Date.now(),
+          raw: {
+            maker: address,
+            sellAssetAddr: getTokenAddress(sellToken),
+            sellAmountWei: parsedSell.toString(),
+            buyAssetAddr: getTokenAddress(buyToken),
+            minBuyAmountWei: parsedBuy.toString(),
+            startBuyAmountWei: (parsedBuy + (parsedBuy * 20n) / 100n).toString(),
+            decayStartTime: BigInt(Math.floor(Date.now() / 1000)).toString(),
+            nonce: nonce.toString(),
+            exclusiveFiller,
+            commitment,
+            salt,
+          },
+        });
       } else {
         const parsedSellAmount = parseUnits(sellAmount, getTokenDecimals(sellToken));
         const parsedBuyAmount = parseUnits(buyAmount, getTokenDecimals(buyToken));
+        const startBuyAmount = parsedBuyAmount + (parsedBuyAmount * 20n) / 100n;
+        const decayStartTime = BigInt(Math.floor(Date.now() / 1000));
 
         const sig = await signIntent({
           maker: address,
@@ -72,21 +178,55 @@ export function CreateIntent() {
           sellAmount: parsedSellAmount,
           buyAsset: getTokenAddress(buyToken),
           minBuyAmount: parsedBuyAmount,
-          startBuyAmount: parsedBuyAmount + (parsedBuyAmount * 20n) / 100n, // +20% start
+          startBuyAmount,
           deadline: deadlineBigInt,
+          decayStartTime,
           nonce,
         });
         setSigResult(sig);
+        addSessionIntent({
+          id: `0x${sig.slice(2, 8)}...${sig.slice(-4)}`,
+          sellAsset: sellToken,
+          sellAmount: sellAmount,
+          buyAsset: buyToken,
+          buyAmount: buyAmount,
+          deadline: Number(deadlineBigInt),
+          status: "active",
+          isPrivate: false,
+          signature: sig,
+          createdAt: Date.now(),
+          raw: {
+            maker: address,
+            sellAssetAddr: getTokenAddress(sellToken),
+            sellAmountWei: parsedSellAmount.toString(),
+            buyAssetAddr: getTokenAddress(buyToken),
+            minBuyAmountWei: parsedBuyAmount.toString(),
+            startBuyAmountWei: startBuyAmount.toString(),
+            decayStartTime: decayStartTime.toString(),
+            nonce: nonce.toString(),
+            exclusiveFiller: "0x0000000000000000000000000000000000000000",
+          },
+        });
       }
       setStatus("signed");
-      setTimeout(() => setStatus("idle"), 4000);
+      setTimeout(() => {
+        setStatus("idle");
+        isSubmittingRef.current = false;
+      }, 4000);
     } catch {
       setStatus("error");
+      isSubmittingRef.current = false;
       setTimeout(() => setStatus("idle"), 3000);
     }
   };
 
   const isSigning = isSigningPublic || isSigningPrivate;
+
+  const insufficientBalance =
+    sellAmount &&
+    sellBalance.balance != null &&
+    parseFloat(sellAmount) > 0 &&
+    parseUnits(sellAmount, getTokenDecimals(sellToken)) > sellBalance.balance;
 
   return (
     <form onSubmit={handleSubmit} className="max-w-lg mx-auto space-y-6">
@@ -119,10 +259,26 @@ export function CreateIntent() {
       </div>
 
       {/* Sell side */}
-      <div className="glass-static rounded-2xl p-5 space-y-4">
-        <label className="text-xs font-medium text-muted font-[family-name:var(--font-body)] uppercase tracking-wider">
-          You Sell
-        </label>
+      <div className="glass-static rounded-2xl p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-muted font-[family-name:var(--font-body)] uppercase tracking-wider">
+            You Sell
+          </label>
+          {isConnected && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted font-[family-name:var(--font-body)]">
+                Balance: {sellBalance.formatted ?? "—"}
+              </span>
+              <button
+                type="button"
+                onClick={handleMax}
+                className="text-[10px] font-bold text-polkadot px-1.5 py-0.5 rounded bg-polkadot/8 hover:bg-polkadot/15 transition-colors cursor-pointer"
+              >
+                MAX
+              </button>
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           <input
             type="number"
@@ -133,7 +289,10 @@ export function CreateIntent() {
           />
           <select
             value={sellToken}
-            onChange={(e) => setSellToken(e.target.value)}
+            onChange={(e) => {
+              if (e.target.value === buyToken) handleSwapTokens();
+              else setSellToken(e.target.value);
+            }}
             className="h-10 px-4 rounded-full bg-foreground/5 text-sm font-medium font-[family-name:var(--font-display)] cursor-pointer border-none outline-none"
           >
             {TOKENS.map((t) => (
@@ -143,22 +302,38 @@ export function CreateIntent() {
             ))}
           </select>
         </div>
+        {insufficientBalance && (
+          <p className="text-xs text-danger font-[family-name:var(--font-body)]">
+            Insufficient {sellToken} balance
+          </p>
+        )}
       </div>
 
       {/* Swap direction arrow */}
       <div className="flex justify-center -my-3 relative z-10">
-        <div className="w-10 h-10 rounded-xl bg-white border border-foreground/10 flex items-center justify-center shadow-sm">
+        <button
+          type="button"
+          onClick={handleSwapTokens}
+          className="w-10 h-10 rounded-xl bg-white border border-foreground/10 flex items-center justify-center shadow-sm hover:border-polkadot/30 hover:shadow-md transition-all cursor-pointer active:scale-95"
+        >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-foreground/40">
             <path d="M8 3V13M8 13L4 9M8 13L12 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-        </div>
+        </button>
       </div>
 
       {/* Buy side */}
-      <div className="glass-static rounded-2xl p-5 space-y-4">
-        <label className="text-xs font-medium text-muted font-[family-name:var(--font-body)] uppercase tracking-wider">
-          You Buy (minimum)
-        </label>
+      <div className="glass-static rounded-2xl p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-muted font-[family-name:var(--font-body)] uppercase tracking-wider">
+            You Buy (minimum)
+          </label>
+          {isConnected && (
+            <span className="text-xs text-muted font-[family-name:var(--font-body)]">
+              Balance: {buyBalance.formatted ?? "—"}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           <input
             type="number"
@@ -169,7 +344,10 @@ export function CreateIntent() {
           />
           <select
             value={buyToken}
-            onChange={(e) => setBuyToken(e.target.value)}
+            onChange={(e) => {
+              if (e.target.value === sellToken) handleSwapTokens();
+              else setBuyToken(e.target.value);
+            }}
             className="h-10 px-4 rounded-full bg-foreground/5 text-sm font-medium font-[family-name:var(--font-display)] cursor-pointer border-none outline-none"
           >
             {TOKENS.map((t) => (
@@ -233,7 +411,7 @@ export function CreateIntent() {
       {/* Submit */}
       <button
         type="submit"
-        disabled={isSigning || !isConnected || !sellAmount || !buyAmount}
+        disabled={isSigning || !isConnected || !sellAmount || !buyAmount || !!insufficientBalance}
         className={`w-full h-14 rounded-2xl font-[family-name:var(--font-display)] font-bold text-sm tracking-wide transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
           status === "signed"
             ? "bg-success text-white"
@@ -255,6 +433,8 @@ export function CreateIntent() {
           "Signing Failed"
         ) : !isConnected ? (
           "Connect Wallet First"
+        ) : insufficientBalance ? (
+          `Insufficient ${sellToken} Balance`
         ) : isPrivate ? (
           "Sign Private Intent"
         ) : (

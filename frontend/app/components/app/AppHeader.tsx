@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { useTokenBalance } from "../../config/hooks";
 
 export function AppHeader() {
   const { address, isConnected } = useAccount();
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
+  const usdcBalance = useTokenBalance(address, "USDC");
+  const dotBalance = useTokenBalance(address, "DOT");
 
   const truncated = address
     ? `${address.slice(0, 6)}...${address.slice(-4)}`
@@ -28,7 +31,7 @@ export function AppHeader() {
           </span>
         </Link>
 
-        {/* Network + Wallet */}
+        {/* Network + Balances + Wallet */}
         <div className="flex items-center gap-3">
           {/* Network indicator */}
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-polkadot-subtle">
@@ -37,6 +40,22 @@ export function AppHeader() {
               Polkadot Hub TestNet
             </span>
           </div>
+
+          {/* Balance chips */}
+          {isConnected && (
+            <div className="hidden sm:flex items-center gap-2">
+              <div className="px-2.5 py-1 rounded-full bg-foreground/[0.04] border border-foreground/5">
+                <span className="text-[11px] font-medium text-foreground font-[family-name:var(--font-body)]">
+                  {usdcBalance.formatted ?? "—"} USDC
+                </span>
+              </div>
+              <div className="px-2.5 py-1 rounded-full bg-foreground/[0.04] border border-foreground/5">
+                <span className="text-[11px] font-medium text-foreground font-[family-name:var(--font-body)]">
+                  {dotBalance.formatted ?? "—"} DOT
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Wallet button */}
           {isConnected ? (

@@ -5,6 +5,7 @@ import { AppHeader } from "../components/app/AppHeader";
 import { CreateIntent } from "../components/app/CreateIntent";
 import { IntentBook } from "../components/app/IntentBook";
 import { SolverPanel } from "../components/app/SolverPanel";
+import { Faucet } from "../components/app/Faucet";
 
 const TABS = [
   {
@@ -68,6 +69,9 @@ export default function AppPage() {
             </button>
           ))}
         </div>
+
+        {/* Faucet */}
+        <Faucet />
 
         {/* Tab content */}
         <div className="animate-fade-up" key={activeTab}>
