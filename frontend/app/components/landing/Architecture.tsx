@@ -18,7 +18,7 @@ export function Architecture() {
         </div>
 
         {/* Architecture diagram */}
-        <div className="glass-static rounded-3xl p-8 sm:p-12 max-w-4xl mx-auto">
+        <div className="architecture-shell glass-static rounded-3xl p-8 sm:p-12 max-w-4xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-6 md:gap-4 items-center">
             {/* EVM Side */}
             <div className="space-y-4">
@@ -38,7 +38,7 @@ export function Architecture() {
               ].map((contract) => (
                 <div
                   key={contract.name}
-                  className="group flex items-start gap-3 p-3 rounded-xl bg-white/60 border border-foreground/5 transition-all hover:border-polkadot/20"
+                  className="architecture-contract-card group flex items-start gap-3 p-3 rounded-xl bg-white/60 border border-foreground/5 transition-all hover:border-polkadot/20"
                 >
                   <div className="mt-0.5 w-2 h-2 rounded-full bg-polkadot/30 group-hover:bg-polkadot transition-colors" />
                   <div>
@@ -52,9 +52,15 @@ export function Architecture() {
             </div>
 
             {/* Cross-VM Bridge */}
-            <div className="flex flex-col items-center gap-2 py-4">
+            <div className="architecture-bridge flex flex-col items-center gap-2 py-4">
               <div className="hidden md:block w-[1px] h-8 bg-gradient-to-b from-transparent to-polkadot/30" />
-              <div className="relative">
+              <div className="architecture-bridge-core relative">
+                <div className="architecture-bridge-track hidden md:block" />
+                <div className="architecture-bridge-beacon architecture-bridge-beacon-left hidden md:block" />
+                <div className="architecture-bridge-beacon architecture-bridge-beacon-right hidden md:block" />
+                <div className="architecture-bridge-shuttle hidden md:flex" aria-hidden="true">
+                  <div className="architecture-bridge-shuttle-dot" />
+                </div>
                 <div className="w-14 h-14 rounded-full border-2 border-polkadot/30 flex items-center justify-center bg-white animate-border">
                   <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-polkadot">
                     <path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -80,7 +86,7 @@ export function Architecture() {
                 </span>
               </div>
 
-              <div className="p-4 rounded-xl bg-foreground text-white border border-foreground">
+              <div className="architecture-runtime-card p-4 rounded-xl bg-foreground text-white border border-foreground">
                 <div className="text-sm font-medium font-[family-name:var(--font-body)] mb-3">
                   PrivacyEngine.pvm
                 </div>
