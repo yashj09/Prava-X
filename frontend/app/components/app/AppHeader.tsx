@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { useIsHydrated, useTokenBalance } from "../../config/hooks";
 
+const SOLVER_ADDRESS =
+  process.env.NEXT_PUBLIC_SOLVER_ADDRESS?.toLowerCase() ?? "";
+
 export function AppHeader() {
   const isHydrated = useIsHydrated();
   const { address, isConnected } = useAccount();
@@ -17,6 +20,10 @@ export function AppHeader() {
   const truncated = hydratedAddress
     ? `${hydratedAddress.slice(0, 6)}...${hydratedAddress.slice(-4)}`
     : "";
+  const isSolverWallet =
+    !!hydratedAddress &&
+    !!SOLVER_ADDRESS &&
+    hydratedAddress.toLowerCase() === SOLVER_ADDRESS;
 
   return (
     <header className="glass-static sticky top-0 z-50">
@@ -67,7 +74,12 @@ export function AppHeader() {
               className="h-8 px-4 rounded-full bg-foreground text-white text-xs font-medium font-[family-name:var(--font-display)] flex items-center gap-2 transition-all hover:bg-polkadot cursor-pointer"
             >
               <div className="w-1.5 h-1.5 rounded-full bg-success" />
-              {truncated}
+              <span>{truncated}</span>
+              {isSolverWallet && (
+                <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/90">
+                  Solver
+                </span>
+              )}
             </button>
           ) : (
             <button
