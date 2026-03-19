@@ -276,7 +276,7 @@ export function startEventLogger() {
       ]);
 
       // Decode and handle reactor logs
-      for (const rawLog of reactorLogs as Array<{ topics: `0x${string}`[]; data: `0x${string}`; transactionHash: string }>) {
+      for (const rawLog of reactorLogs as Array<{ topics: [`0x${string}`, ...`0x${string}`[]]; data: `0x${string}`; transactionHash: string }>) {
         try {
           const decoded = decodeEventLog({
             abi: reactorAbi,
@@ -290,7 +290,7 @@ export function startEventLogger() {
       }
 
       // Decode and handle registry logs
-      for (const rawLog of registryLogs as Array<{ topics: `0x${string}`[]; data: `0x${string}`; transactionHash: string }>) {
+      for (const rawLog of registryLogs as Array<{ topics: [`0x${string}`, ...`0x${string}`[]]; data: `0x${string}`; transactionHash: string }>) {
         try {
           const decoded = decodeEventLog({
             abi: registryAbi,
