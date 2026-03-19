@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useReadContract, useWriteContract, useSignTypedData, useBalance } from "wagmi";
 import { parseEther, erc20Abi } from "viem";
 import { CONTRACTS, TOKENS } from "./contracts";
@@ -8,6 +9,16 @@ import intentReactorAbi from "./abi/IntentReactor.json";
 import solverRegistryAbi from "./abi/SolverRegistry.json";
 
 const CHAIN_ID = polkadotHub.id;
+
+export function useIsHydrated() {
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
+
+  return isHydrated;
+}
 
 // EIP-712 domain for intent signing
 // Must include chainId + verifyingContract to match OpenZeppelin's EIP712 in the contract

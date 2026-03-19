@@ -2,17 +2,20 @@
 
 import Link from "next/link";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
-import { useTokenBalance } from "../../config/hooks";
+import { useIsHydrated, useTokenBalance } from "../../config/hooks";
 
 export function AppHeader() {
+  const isHydrated = useIsHydrated();
   const { address, isConnected } = useAccount();
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
-  const usdcBalance = useTokenBalance(address, "USDC");
-  const dotBalance = useTokenBalance(address, "DOT");
+  const hydratedAddress = isHydrated ? address : undefined;
+  const showConnectedState = isHydrated && isConnected;
+  const usdcBalance = useTokenBalance(hydratedAddress, "USDC");
+  const dotBalance = useTokenBalance(hydratedAddress, "DOT");
 
-  const truncated = address
-    ? `${address.slice(0, 6)}...${address.slice(-4)}`
+  const truncated = hydratedAddress
+    ? `${hydratedAddress.slice(0, 6)}...${hydratedAddress.slice(-4)}`
     : "";
 
   return (
@@ -42,7 +45,7 @@ export function AppHeader() {
           </div>
 
           {/* Balance chips */}
-          {isConnected && (
+          {showConnectedState && (
             <div className="hidden sm:flex items-center gap-2">
               <div className="px-2.5 py-1 rounded-full bg-foreground/[0.04] border border-foreground/5">
                 <span className="text-[11px] font-medium text-foreground font-[family-name:var(--font-body)]">
@@ -58,7 +61,7 @@ export function AppHeader() {
           )}
 
           {/* Wallet button */}
-          {isConnected ? (
+          {showConnectedState ? (
             <button
               onClick={() => disconnect()}
               className="h-8 px-4 rounded-full bg-foreground text-white text-xs font-medium font-[family-name:var(--font-display)] flex items-center gap-2 transition-all hover:bg-polkadot cursor-pointer"

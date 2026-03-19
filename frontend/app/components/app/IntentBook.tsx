@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAccount } from "wagmi";
+import { useIsHydrated } from "../../config/hooks";
 
 type IntentStatus = "active" | "filling" | "filled" | "expired" | "private";
 
@@ -102,14 +103,16 @@ function getIntentStatus(intent: SignedIntent, now: number): IntentStatus {
 
 /** Hook to subscribe to intent store changes */
 export function useIntentStore() {
-  const [intents, setIntents] = useState<SignedIntent[]>(() => loadIntents());
-  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+  const [intents, setIntents] = useState<SignedIntent[]>([]);
+  const [now, setNow] = useState(0);
 
   const refresh = useCallback(() => {
     setIntents(loadIntents());
   }, []);
 
   useEffect(() => {
+    refresh();
+    setNow(Math.floor(Date.now() / 1000));
     const handler = () => refresh();
     const timer = window.setInterval(() => {
       setNow(Math.floor(Date.now() / 1000));
@@ -126,7 +129,9 @@ export function useIntentStore() {
 }
 
 export function IntentBook() {
+  const isHydrated = useIsHydrated();
   const { address } = useAccount();
+  const hydratedAddress = isHydrated ? address : undefined;
   const { intents, refresh, now } = useIntentStore();
 
   const displayIntents = intents.map((intent) => ({
@@ -184,7 +189,7 @@ export function IntentBook() {
               No intents yet
             </h4>
             <p className="text-xs text-muted font-[family-name:var(--font-body)] max-w-xs mx-auto leading-relaxed">
-              {address
+              {hydratedAddress
                 ? "Intents you sign will appear here. Go to Create Intent to get started."
                 : "Connect your wallet and create your first intent to see it here."}
             </p>

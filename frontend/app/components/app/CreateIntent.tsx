@@ -3,28 +3,32 @@
 import { useState, useRef } from "react";
 import { useAccount, useWriteContract, useReadContract } from "wagmi";
 import { parseUnits, keccak256, encodePacked, pad, formatUnits, erc20Abi, maxUint256 } from "viem";
+import { toast } from "sonner";
 import { CONTRACTS, TOKENS } from "../../config/contracts";
 import { polkadotHub } from "../../config/wagmi";
-import { useSignIntent, useSignPrivateIntent, useTokenBalance } from "../../config/hooks";
+import { useIsHydrated, useSignIntent, useSignPrivateIntent, useTokenBalance } from "../../config/hooks";
 import { addSessionIntent } from "./IntentBook";
 import intentReactorAbi from "../../config/abi/IntentReactor.json";
 
 export function CreateIntent() {
+  const isHydrated = useIsHydrated();
   const { address, isConnected } = useAccount();
+  const hydratedAddress = isHydrated ? address : undefined;
+  const showConnectedState = isHydrated && isConnected;
   const [sellToken, setSellToken] = useState("USDC");
   const [buyToken, setBuyToken] = useState("DOT");
   const [sellAmount, setSellAmount] = useState("");
   const [buyAmount, setBuyAmount] = useState("");
   const [deadline, setDeadline] = useState("30");
-  const [isPrivate, setIsPrivate] = useState(true);
+  const [isPrivate, setIsPrivate] = useState(false);
   const [status, setStatus] = useState<"idle" | "signing" | "signed" | "error">("idle");
   const [sigResult, setSigResult] = useState<string | null>(null);
 
   const { signIntent, isPending: isSigningPublic } = useSignIntent();
   const { signPrivateIntent, isPending: isSigningPrivate } = useSignPrivateIntent();
 
-  const sellBalance = useTokenBalance(address, sellToken);
-  const buyBalance = useTokenBalance(address, buyToken);
+  const sellBalance = useTokenBalance(hydratedAddress, sellToken);
+  const buyBalance = useTokenBalance(hydratedAddress, buyToken);
   const { writeContractAsync } = useWriteContract();
 
   const isSubmittingRef = useRef(false);
@@ -35,9 +39,9 @@ export function CreateIntent() {
     address: sellTokenAddr,
     abi: erc20Abi,
     functionName: "allowance",
-    args: address ? [address, CONTRACTS.intentReactor] : undefined,
+    args: hydratedAddress ? [hydratedAddress, CONTRACTS.intentReactor] : undefined,
     chainId: polkadotHub.id,
-    query: { enabled: !!address && !!sellTokenAddr },
+    query: { enabled: !!hydratedAddress && !!sellTokenAddr },
   });
 
   const getTokenAddress = (symbol: string): `0x${string}` => {
@@ -132,7 +136,7 @@ export function CreateIntent() {
           exclusiveFiller,
         ] as const;
 
-        await writeContractAsync({
+        const txHash = await writeContractAsync({
           address: CONTRACTS.intentReactor,
           abi: intentReactorAbi,
           functionName: "submitPrivateIntent",
@@ -165,6 +169,15 @@ export function CreateIntent() {
             commitment,
             salt,
           },
+        });
+
+        toast.success("Private intent submitted", {
+          description: `${sellAmount} ${sellToken} for at least ${buyAmount} ${buyToken}.`,
+          action: {
+            label: "View on Explorer",
+            onClick: () => window.open(`https://blockscout-testnet.polkadot.io/tx/${txHash}`, "_blank"),
+          },
+          duration: 10000,
         });
       } else {
         const parsedSellAmount = parseUnits(sellAmount, getTokenDecimals(sellToken));
@@ -207,13 +220,26 @@ export function CreateIntent() {
             exclusiveFiller: "0x0000000000000000000000000000000000000000",
           },
         });
+
+        toast.success("Intent signed", {
+          description: `${sellAmount} ${sellToken} for at least ${buyAmount} ${buyToken}.`,
+          duration: 6000,
+        });
       }
       setStatus("signed");
       setTimeout(() => {
         setStatus("idle");
         isSubmittingRef.current = false;
       }, 4000);
-    } catch {
+    } catch (err) {
+      const description =
+        err instanceof Error
+          ? err.message.slice(0, 120)
+          : "Wallet request was rejected or the transaction reverted.";
+      toast.error("Intent creation failed", {
+        description,
+        duration: 6000,
+      });
       setStatus("error");
       isSubmittingRef.current = false;
       setTimeout(() => setStatus("idle"), 3000);
@@ -264,7 +290,7 @@ export function CreateIntent() {
           <label className="text-xs font-medium text-muted font-[family-name:var(--font-body)] uppercase tracking-wider">
             You Sell
           </label>
-          {isConnected && (
+          {showConnectedState && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted font-[family-name:var(--font-body)]">
                 Balance: {sellBalance.formatted ?? "—"}
@@ -328,7 +354,7 @@ export function CreateIntent() {
           <label className="text-xs font-medium text-muted font-[family-name:var(--font-body)] uppercase tracking-wider">
             You Buy (minimum)
           </label>
-          {isConnected && (
+          {showConnectedState && (
             <span className="text-xs text-muted font-[family-name:var(--font-body)]">
               Balance: {buyBalance.formatted ?? "—"}
             </span>
@@ -411,7 +437,7 @@ export function CreateIntent() {
       {/* Submit */}
       <button
         type="submit"
-        disabled={isSigning || !isConnected || !sellAmount || !buyAmount || !!insufficientBalance}
+        disabled={isSigning || !showConnectedState || !sellAmount || !buyAmount || !!insufficientBalance}
         className={`w-full h-14 rounded-2xl font-[family-name:var(--font-display)] font-bold text-sm tracking-wide transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
           status === "signed"
             ? "bg-success text-white"
@@ -431,7 +457,7 @@ export function CreateIntent() {
           </span>
         ) : status === "error" ? (
           "Transaction Failed"
-        ) : !isConnected ? (
+        ) : !showConnectedState ? (
           "Connect Wallet First"
         ) : insufficientBalance ? (
           `Insufficient ${sellToken} Balance`
@@ -444,7 +470,7 @@ export function CreateIntent() {
 
       {/* Info */}
       <p className="text-center text-xs text-muted-light font-[family-name:var(--font-body)]">
-        {isConnected
+        {showConnectedState
           ? isPrivate
             ? "Private intents require on-chain approval + commitment submission. The later reveal is verified by the Rust PVM."
             : "Public intents are signed off-chain (gasless). No transaction until a solver fills it."

@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useAccount, useWriteContract } from "wagmi";
+import { useAccount, useWriteContract, useSwitchChain } from "wagmi";
 import { parseUnits } from "viem";
 import { CONTRACTS } from "../../config/contracts";
 import { polkadotHub } from "../../config/wagmi";
-import { useTokenBalance } from "../../config/hooks";
+import { useIsHydrated, useTokenBalance } from "../../config/hooks";
 
 const mintAbi = [
   {
@@ -21,18 +21,25 @@ const mintAbi = [
 ] as const;
 
 export function Faucet() {
+  const isHydrated = useIsHydrated();
   const { address, isConnected } = useAccount();
+  const hydratedAddress = isHydrated ? address : undefined;
+  const showConnectedState = isHydrated && isConnected;
   const { writeContractAsync } = useWriteContract();
+  const { switchChainAsync } = useSwitchChain();
   const [minting, setMinting] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const usdcBalance = useTokenBalance(address, "USDC");
-  const dotBalance = useTokenBalance(address, "DOT");
+  const usdcBalance = useTokenBalance(hydratedAddress, "USDC");
+  const dotBalance = useTokenBalance(hydratedAddress, "DOT");
 
   const handleMint = async (token: "USDC" | "DOT") => {
     if (!address || minting) return;
     setMinting(token);
     setSuccess(null);
     try {
+      // Ensure wallet is on the correct chain before minting
+      await switchChainAsync({ chainId: polkadotHub.id });
+
       const tokenAddr = token === "USDC" ? CONTRACTS.mockUsdc : CONTRACTS.mockDot;
       const decimals = token === "USDC" ? 6 : 18;
       const amount = token === "USDC" ? parseUnits("1000", decimals) : parseUnits("100", decimals);
@@ -58,7 +65,7 @@ export function Faucet() {
     }
   };
 
-  if (!isConnected) return null;
+  if (!showConnectedState) return null;
 
   return (
     <div className="glass-static rounded-2xl p-4 max-w-lg mx-auto mb-6">
