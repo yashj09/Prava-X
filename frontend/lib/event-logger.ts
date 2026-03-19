@@ -283,7 +283,8 @@ export function startEventLogger() {
             data: rawLog.data,
             topics: rawLog.topics,
           });
-          handleEvent(decoded.eventName, decoded.args as Record<string, unknown>, rawLog.transactionHash);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if (decoded.eventName) handleEvent(decoded.eventName, decoded.args as any, rawLog.transactionHash);
         } catch {
           // Unknown event from this contract — ignore
         }
@@ -297,7 +298,8 @@ export function startEventLogger() {
             data: rawLog.data,
             topics: rawLog.topics,
           });
-          handleEvent(decoded.eventName, decoded.args as Record<string, unknown>, rawLog.transactionHash);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if (decoded.eventName) handleEvent(decoded.eventName, decoded.args as any, rawLog.transactionHash);
         } catch {
           // Unknown event from this contract — ignore
         }
