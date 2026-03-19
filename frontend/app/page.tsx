@@ -19,7 +19,7 @@ export default function Home() {
               </svg>
             </div>
             <span className="font-[family-name:var(--font-display)] text-sm font-bold tracking-tight">
-              XCM Intents
+              Prava X
             </span>
           </div>
           <a

@@ -16,9 +16,9 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "XCM Intents | Privacy-First Cross-Chain Intents",
+  title: "Prava X | Privacy-First Cross-Chain Intents",
   description:
-    "Privacy-preserving cross-chain intent protocol on Polkadot Hub. ZK commitments verified by Rust PVM, settled via XCM.",
+    "Prava X is a privacy-preserving cross-chain intent protocol on Polkadot Hub. ZK commitments are verified by Rust PVM and settled via XCM.",
 };
 
 export default function RootLayout({

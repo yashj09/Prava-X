@@ -17,7 +17,7 @@ export function Footer() {
                 </svg>
               </div>
               <span className="font-[family-name:var(--font-display)] text-base font-bold tracking-tight">
-                XCM Intents
+                Prava X
               </span>
             </div>
             <p className="text-xs text-muted mt-2 font-[family-name:var(--font-body)]">
