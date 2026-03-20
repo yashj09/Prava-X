@@ -18,6 +18,11 @@ up front.
 - Rust PolkaVM verifies private reveals against the original commitment
 - Cross-chain fills can use escrow plus the XCM precompile
 
+<img width="2560" height="1440" alt="Screenshot 2026-03-20 at 4 11 04 AM" src="https://github.com/user-attachments/assets/711267c9-80ed-460e-b7ca-143436de42b6" />
+
+<img width="1406" height="1052" alt="Screenshot 2026-03-20 at 5 08 08 PM" src="https://github.com/user-attachments/assets/17065b2b-29ca-4bc8-b5c6-17f0ba4a329a" />
+
+
 ## Core Components
 
 - `src/IntentReactor.sol`
