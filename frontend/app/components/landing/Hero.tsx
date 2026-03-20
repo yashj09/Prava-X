@@ -75,8 +75,8 @@ export function Hero() {
 
             {/* Subheading */}
             <p className="animate-fade-up stagger-3 mt-8 text-lg sm:text-xl leading-relaxed text-muted max-w-lg font-[family-name:var(--font-body)]">
-              Your trade parameters stay hidden until settlement. ZK
-              commitments verified by a{" "}
+              Your trade parameters stay hidden until settlement. ZK commitments
+              verified by a{" "}
               <span className="text-foreground font-medium">
                 Rust PVM contract
               </span>
@@ -110,8 +110,8 @@ export function Hero() {
                 />
               </svg>
               <span className="text-sm font-[family-name:var(--font-body)]">
-                Sell <span className="redacted">1000 USDC</span> for{" "}
-                <span className="redacted">250 PAS</span>
+                Sell <span className="redacted">100 USDC</span> for{" "}
+                <span className="redacted">50 DOT</span>
               </span>
               <span className="text-xs text-muted-light ml-2">
                 hover to reveal
@@ -208,9 +208,7 @@ export function Hero() {
                   <div className="protocol-globe">
                     <div className="protocol-core-glow" />
                     <div className="protocol-core">
-                      <div className="protocol-core-label">
-                        IntentReactor
-                      </div>
+                      <div className="protocol-core-label">IntentReactor</div>
                       <div className="protocol-core-subtitle">
                         Solidity
                         <br />
@@ -244,7 +242,6 @@ export function Hero() {
                     </div>
                   ))}
                 </div>
-
               </div>
             </div>
           </div>
