@@ -33,6 +33,20 @@ up front.
 - `frontend/`
   Next.js app for creating and filling intents
 
+## Deployed Addresses
+
+Current Polkadot Hub TestNet addresses used by the frontend:
+
+| Component | Address | Explorer |
+| --- | --- | --- |
+| Privacy Engine | `0x3121f213e88cf5b2b02e330c98a92a19ee81a3d6` | [View](https://blockscout-testnet.polkadot.io/address/0x3121f213e88cf5b2b02e330c98a92a19ee81a3d6) |
+| Intent Reactor | `0x02da54F6Af05423D3441166FDf4c779BD5911E7c` | [View](https://blockscout-testnet.polkadot.io/address/0x02da54F6Af05423D3441166FDf4c779BD5911E7c) |
+| Escrow Vault | `0xA4093fDcfFe5e37554B55840aB77EC6f23CEFc8F` | [View](https://blockscout-testnet.polkadot.io/address/0xA4093fDcfFe5e37554B55840aB77EC6f23CEFc8F) |
+| Solver Registry | `0x5db591fad47489c144737209969c6F055869F5C1` | [View](https://blockscout-testnet.polkadot.io/address/0x5db591fad47489c144737209969c6F055869F5C1) |
+| Mock USDC | `0xFAD89510E5D1c3624C05053c1752B06a2D255387` | [View](https://blockscout-testnet.polkadot.io/address/0xFAD89510E5D1c3624C05053c1752B06a2D255387) |
+| Mock DOT | `0x8D6350aDC02B2D9c181D6b475439A14B6067eA83` | [View](https://blockscout-testnet.polkadot.io/address/0x8D6350aDC02B2D9c181D6b475439A14B6067eA83) |
+| Solver Wallet | `0x271ADdfC96533Ec92C0Eb905eAAab6f68040db06` | [View](https://blockscout-testnet.polkadot.io/address/0x271ADdfC96533Ec92C0Eb905eAAab6f68040db06) |
+
 ## High-Level Flow
 
 ```text
