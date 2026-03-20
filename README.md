@@ -1,66 +1,111 @@
-## Foundry
+# Prava X
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+Prava X is a privacy-first cross-chain intents product on Polkadot Hub.
 
-Foundry consists of:
+Under the hood, it uses a dual-VM design:
 
-- **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
-- **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
-- **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
-- **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+- Solidity handles intent creation, settlement, staking, and escrow
+- Rust PolkaVM handles private intent verification
 
-## Documentation
+The goal is simple: let users express intents without exposing trade parameters
+up front.
 
-https://book.getfoundry.sh/
+## What It Does
 
-## Usage
+- Public intents can be signed off-chain with EIP-712
+- Private intents store only a commitment on-chain
+- Solvers fill intents and provide buy-side liquidity
+- Rust PolkaVM verifies private reveals against the original commitment
+- Cross-chain fills can use escrow plus the XCM precompile
 
-### Build
+## Core Components
 
-```shell
-$ forge build
+- `src/IntentReactor.sol`
+  Core contract for intent lifecycle, fills, and privacy verification flow
+- `src/SolverRegistry.sol`
+  Native PAS staking, activation, unstaking, and slashing hooks
+- `src/EscrowVault.sol`
+  Escrow used for cross-chain settlement flows
+- `rust-privacy-engine/src/rust-privacy-engine.rs`
+  Rust PolkaVM contract for commitment computation and verification
+- `solver/`
+  Off-chain solver service
+- `frontend/`
+  Next.js app for creating and filling intents
+
+## High-Level Flow
+
+```text
+Maker creates an intent
+  -> Public: sign off-chain
+  -> Private: sign, then submit commitment on-chain
+Solver fills the intent
+  -> Private fills call Rust PolkaVM for verification
+Settlement completes on Solidity
+  -> XCM path uses escrow + precompile
 ```
 
-### Test
+## Local Development
 
-```shell
-$ forge test
-```
+### Requirements
 
-### Format
+- Foundry
+- Rust
+- Node.js
 
-```shell
-$ forge fmt
-```
+### Build Contracts
 
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
+```bash
+forge build
+cd rust-privacy-engine && cargo build --release
 ```
 
 ### Deploy
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+```bash
+export ETH_RPC_URL="https://services.polkadothub-rpc.com/testnet"
+
+PRIVACY_ENGINE=$(cast send --account dev --create \
+  "$(xxd -p -c 99999 rust-privacy-engine/target/rust-privacy-engine.release.polkavm)" \
+  --json | jq -r .contractAddress)
+
+PRIVACY_ENGINE_ADDRESS=$PRIVACY_ENGINE forge script script/Deploy.s.sol \
+  --rpc-url $ETH_RPC_URL --broadcast
 ```
 
-### Cast
+### Run Frontend
 
-```shell
-$ cast <subcommand>
+```bash
+cd frontend
+npm install
+npm run dev
 ```
 
-### Help
+### Run Solver
 
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
+```bash
+cd solver
+npm install
+npm run dev
 ```
+
+## Network
+
+- Polkadot Hub TestNet
+- RPC: `https://services.polkadothub-rpc.com/testnet`
+- Chain ID: `420420417`
+
+## Repo Layout
+
+```text
+src/                  Solidity contracts
+rust-privacy-engine/  Rust PolkaVM verifier
+frontend/             Web app
+solver/               Off-chain solver
+script/               Deployment scripts
+docs/                 Supporting docs
+```
+
+## License
+
+MIT
