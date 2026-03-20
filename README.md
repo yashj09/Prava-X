@@ -10,6 +10,10 @@ Under the hood, it uses a dual-VM design:
 The goal is simple: let users express intents without exposing trade parameters
 up front.
 
+## Demo Video
+
+Watch the product walkthrough here: [YouTube Demo](https://youtu.be/a6OX0listXk)
+
 ## What It Does
 
 - Public intents can be signed off-chain with EIP-712
